@@ -2,181 +2,226 @@
 <html lang="ru">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cluster Management System</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <title>Cluster Management System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
-  <div class="container">
-
-    <div id="screen-setup" class="card">
-      <h1>Cluster Config</h1>
-      <p style="color: #718096; margin-bottom: 30px;">Задайте параметры кластера и количество нагрузок (контейнеров).
-      </p>
-
-      <div style="display:flex; gap:20px; margin-bottom:30px;">
-        <div style="flex:1">
-          <label style="font-size:12px; font-weight:700; color:#a0aec0;">NODES (M)</label>
-          <input type="number" id="m" value="4"
-            style="width:100%; padding:12px; border-radius:10px; border:1px solid #e2e8f0; margin-top:5px;">
-        </div>
-        <div style="flex:1">
-          <label style="font-size:12px; font-weight:700; color:#a0aec0;">CONTAINERS (N)</label>
-          <input type="number" id="n" value="12"
-            style="width:100%; padding:12px; border-radius:10px; border:1px solid #e2e8f0; margin-top:5px;">
-        </div>
-      </div>
-
-      <button onclick="initData('random')">Generate Random</button>
-      <button class="secondary" onclick="initData('manual')">Manual Entry</button>
-    </div>
-
-    <div id="screen-data" class="card hidden">
-      <h1>Resource Definitions</h1>
-      <div style="display:flex; gap:30px;">
-        <div style="flex:1">
-          <h3>Nodes Setup</h3>
-          <div id="nodes-edit"></div>
-        </div>
-        <div style="flex:1">
-          <h3>Containers Setup</h3>
-          <div id="containers-edit"></div>
-        </div>
-      </div>
-      <div style="margin-top:40px; border-top: 1px solid #eee; padding-top:20px;">
-        <button onclick="saveAndGo()">Initialize Simulation</button>
-        <button class="secondary" onclick="location.reload()">Cancel</button>
-      </div>
-    </div>
-
-    <div id="screen-sim" class="card hidden">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px;">
-        <h1>Live Simulation</h1>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:12px; font-weight:700; color:#718096;">ALGORITHM:</span>
-          <select id="method" onchange="solve()"
-            style="background:#2c3e50; color:white; border:none; padding:10px 20px;">
-            <option value="1">First Fit (z=1)</option>
-            <option value="2">Best Fit (z=2)</option>
-            <option value="3">Worst Fit (z=3)</option>
-            <option value="4">Genetic Algorithm (z=4)</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="viz" class="grid"></div>
-
-      <div class="metrics-grid">
-        <div class="metric-box">
-          <h4>Active Nodes</h4>
-          <p id="res-n">-</p>
-        </div>
-        <div class="metric-box">
-          <h4>Unplaced</h4>
-          <p id="res-p">-%</p>
-        </div>
-        <div class="metric-box">
-          <h4>System Load</h4>
-          <p id="res-avg">-/-</p>
-        </div>
-        <div class="metric-box">
-          <h4>Dispersion (D)</h4>
-          <p id="res-d">-</p>
-        </div>
-      </div>
-
-      <button class="secondary" onclick="location.reload()" style="margin-top:40px; width:100%;">Create New
-        Experiment</button>
-    </div>
-  </div>
-
-  <script>
-    let currentData = {};
-    const cpuValues = [1, 2, 4, 8, 16, 32, 64];
-    const ramValues = [512, 1024, 2048, 4096, 8192, 16384, 32768];
-
-    async function initData(mode) {
-      const res = await fetch('/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ m: document.getElementById('m').value, n: document.getElementById('n').value, mode })
-      });
-      currentData = await res.json();
-      renderEditTables();
-      document.getElementById('screen-setup').classList.add('hidden');
-      document.getElementById('screen-data').classList.remove('hidden');
-    }
-
-    function renderEditTables() {
-      let nH = '<table><tr><th>ID</th><th>CPU</th><th>RAM</th></tr>';
-      currentData.nodes.forEach((n, i) => {
-        nH += `<tr><td>Node ${n.id}</td>
-        <td><select onchange="currentData.nodes[${i}].cpu_max=Number(this.value)">${cpuValues.map(v => `<option value="${v}" ${v == n.cpu_max ? 'selected' : ''}>${v} vCPU</option>`).join('')}</select></td>
-        <td><select onchange="currentData.nodes[${i}].ram_max=Number(this.value)">${ramValues.map(v => `<option value="${v}" ${v == n.ram_max ? 'selected' : ''}>${v} MB</option>`).join('')}</select></td></tr>`;
-      });
-      document.getElementById('nodes-edit').innerHTML = nH + '</table>';
-
-      let cH = '<table><tr><th>ID</th><th>CPU</th><th>RAM</th></tr>';
-      currentData.containers.forEach((c, i) => {
-        cH += `<tr><td>Cont ${c.id}</td>
-        <td><select onchange="currentData.containers[${i}].cpu=Number(this.value)">${cpuValues.map(v => `<option value="${v}" ${v == c.cpu ? 'selected' : ''}>${v} vCPU</option>`).join('')}</select></td>
-        <td><select onchange="currentData.containers[${i}].ram=Number(this.value)">${ramValues.map(v => `<option value="${v}" ${v == c.ram ? 'selected' : ''}>${v} MB</option>`).join('')}</select></td></tr>`;
-      });
-      document.getElementById('containers-edit').innerHTML = cH + '</table>';
-    }
-
-    async function saveAndGo() {
-      await fetch('/update_data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentData)
-      });
-      document.getElementById('screen-data').classList.add('hidden');
-      document.getElementById('screen-sim').classList.remove('hidden');
-      solve();
-    }
-
-    async function solve() {
-      const method = document.getElementById('method').value;
-      const res = await fetch('/solve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method })
-      });
-      const data = await res.json();
-
-      let html = '';
-      data.nodes.forEach(n => {
-        const cpuP = (n.cpu_used / n.cpu_max) * 100 || 0;
-        const ramP = (n.ram_used / n.ram_max) * 100 || 0;
-
-        // Определяем цвет полоски
-        const color = cpuP > 90 ? '#e74c3c' : (cpuP > 70 ? '#f1c40f' : '#2ecc71');
-
-        html += `<div class="node-card ${n.items.length > 0 ? 'used' : ''}">
-            <div class="node-header"><span class="node-id">SERVER ${n.id}</span> <span style="font-size:10px; color:#a0aec0;">${n.items.length} units</span></div>
-            
-            <div class="progress-label"><span>CPU LOAD</span><span>${Math.round(cpuP)}%</span></div>
-            <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(cpuP, 100)}%; background:${color};"></div></div>
-            
-            <div class="progress-label"><span>RAM LOAD</span><span>${Math.round(ramP)}%</span></div>
-            <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(ramP, 100)}%; background:#3498db;"></div></div>
-            
-            <div style="font-size:11px; color:#718096; background:#f7fafc; padding:8px; border-radius:8px;">
-                <strong>Items:</strong> ${n.items.length > 0 ? n.items.join(', ') : 'Empty'}
+    <div class="container">
+        <div id="screen-setup" class="card">
+            <h1>Инициализация кластера</h1>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+                <div>
+                    <label>Количество узлов (Nodes)</label>
+                    <input type="number" id="m" value="4">
+                </div>
+                <div>
+                    <label>Количество контейнеров (Containers)</label>
+                    <input type="number" id="n" value="10">
+                </div>
             </div>
+            <button onclick="initData()">Создать среду</button>
+        </div>
+
+        <div id="screen-data" class="card hidden">
+            <h1>Настройка ресурсов</h1>
+            <div style="display:flex; gap:20px; max-height: 450px; overflow-y: auto;">
+                <div id="nodes-edit" style="flex:1"></div>
+                <div id="containers-edit" style="flex:1"></div>
+            </div>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button onclick="saveAndGo()">Запустить симуляцию</button>
+                <button class="secondary" onclick="location.reload()">На главную</button>
+            </div>
+        </div>
+
+        <div id="screen-sim" class="card hidden">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h1>Результаты</h1>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <span>Алгоритм:</span>
+                    <select id="method" onchange="runSingleSolve()" style="width:200px;">
+                        <option value="1">First Fit</option>
+                        <option value="2">Best Fit</option>
+                        <option value="3">Worst Fit</option>
+                        <option value="4">Genetic Algorithm</option>
+                    </select>
+                    <button class="secondary" onclick="location.reload()">На главную</button>
+                </div>
+            </div>
+
+            <div id="viz" class="grid"></div>
+
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <h4>Узлов занято</h4>
+                    <p id="res-n">-</p>
+                </div>
+                <div class="metric-box">
+                    <h4>Avg CPU %</h4>
+                    <p id="res-cpu">-</p>
+                </div>
+                <div class="metric-box">
+                    <h4>Avg RAM %</h4>
+                    <p id="res-ram">-</p>
+                </div>
+                <div class="metric-box">
+                    <h4>Время (ms)</h4>
+                    <p id="res-t">-</p>
+                </div>
+            </div>
+            <!-- Кнопка запуска -->
+            <button onclick="runComparison()" style="background:#3498db; width:100%; margin-top:20px;">
+                Сравнить все методы
+            </button>
+
+            <!-- Секция сравнения -->
+            <div id="compare-section" class="card hidden"
+                style="margin-top:30px; border:1px solid #eee; box-shadow:none;">
+
+                <!-- Блок вердикта -->
+                <div id="verdict-box"
+                    style="padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #ddd; background: #f9f9f9;">
+                    <div id="verdict-text" style="font-size: 14px; line-height: 1.6;">
+                        Нажмите «Сравнить», чтобы получить аналитический отчет
+                    </div>
+                </div>
+
+                <!-- Сетка с графиками -->
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                    <div style="height:250px;"><canvas id="chart-n"></canvas></div>
+                    <div style="height:250px;"><canvas id="chart-d"></canvas></div>
+                    <div style="height:250px;"><canvas id="chart-p"></canvas></div>
+                    <div style="height:250px;"><canvas id="chart-t"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        let currentData = {};
+        let charts = {};
+        const cpuVals = [1, 2, 4, 8, 16, 32, 64];
+        const ramVals = [512, 1024, 2048, 4096, 8192, 16384, 32768];
+
+        async function initData() {
+            const m = document.getElementById('m').value;
+            const n = document.getElementById('n').value;
+            const res = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ m, n })
+            });
+            currentData = await res.json();
+            renderTables();
+            document.getElementById('screen-setup').classList.add('hidden');
+            document.getElementById('screen-data').classList.remove('hidden');
+        }
+
+        function renderTables() {
+            let nH = '<h3>Узлы (Nodes)</h3><table><tr><th>Имя</th><th>CPU</th><th>RAM</th></tr>';
+            currentData.nodes.forEach((n, i) => {
+                // Мы заменили '#${n.id}' на 'Узел ${n.id}' и th 'ID' на 'Имя'
+                nH += `<tr><td>Узел ${n.id}</td>
+        <td><select onchange="currentData.nodes[${i}].cpu_max=Number(this.value)">${cpuVals.map(v => `<option value="${v}" ${v == n.cpu_max ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+        <td><select onchange="currentData.nodes[${i}].ram_max=Number(this.value)">${ramVals.map(v => `<option value="${v}" ${v == n.ram_max ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`;
+            });
+            document.getElementById('nodes-edit').innerHTML = nH + '</table>';
+
+            let cH = '<h3>Контейнеры</h3><table><tr><th>Имя</th><th>CPU</th><th>RAM</th></tr>';
+            currentData.containers.forEach((c, i) => {
+                // Мы заменили '#${c.id}' на 'Конт ${c.id}' и th 'ID' на 'Имя'
+                cH += `<tr><td>Конт ${c.id}</td>
+        <td><select onchange="currentData.containers[${i}].cpu=Number(this.value)">${cpuVals.map(v => `<option value="${v}" ${v == c.cpu ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+        <td><select onchange="currentData.containers[${i}].ram=Number(this.value)">${ramVals.map(v => `<option value="${v}" ${v == c.ram ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`;
+            });
+            document.getElementById('containers-edit').innerHTML = cH + '</table>';
+        }
+
+        async function saveAndGo() {
+            await fetch('/update_data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentData) });
+            document.getElementById('screen-data').classList.add('hidden');
+            document.getElementById('screen-sim').classList.remove('hidden');
+            runSingleSolve();
+        }
+
+        async function runSingleSolve() {
+            const m = document.getElementById('method').value;
+            const res = await fetch('/solve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: m }) });
+            const data = await res.json();
+
+            let html = '';
+            data.nodes.forEach(n => {
+                const cP = Math.round((n.cpu_used / n.cpu_max) * 100) || 0;
+                const rP = Math.round((n.ram_used / n.ram_max) * 100) || 0;
+                html += `<div class="node-card ${n.items.length ? 'used' : ''}">
+            <div class="node-header"><strong>Узел ${n.id}</strong></div>
+            <div class="bar-label">CPU: ${cP}% (${n.cpu_used}/${n.cpu_max})</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${cP}%; background:#2ecc71"></div></div>
+            <div class="bar-label">RAM: ${rP}% (${n.ram_used}/${n.ram_max})</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${rP}%; background:#3498db"></div></div>
+            <small>ID конт: ${n.items.join(',') || 'пусто'}</small>
         </div>`;
-      });
-      document.getElementById('viz').innerHTML = html;
-      document.getElementById('res-n').innerText = data.metrics.n_used;
-      document.getElementById('res-p').innerText = data.metrics.p_unplaced + '%';
-      document.getElementById('res-avg').innerText = `${data.metrics.avg_cpu}% / ${data.metrics.avg_ram}%`;
-      document.getElementById('res-d').innerText = data.metrics.dispersion;
-    }
-  </script>
+            });
+            document.getElementById('viz').innerHTML = html;
+            document.getElementById('res-n').innerText = data.metrics.n_used;
+            document.getElementById('res-cpu').innerText = data.metrics.avg_cpu + '%';
+            document.getElementById('res-ram').innerText = data.metrics.avg_ram + '%';
+            document.getElementById('res-t').innerText = data.metrics.exec_time;
+        }
+
+        async function runComparison() {
+            const res = await fetch('/compare_all', { method: 'POST' });
+            const data = await res.json();
+            document.getElementById('compare-section').classList.remove('hidden');
+
+            // Сначала строим графики
+            const labels = data.map(d => d.name);
+            const createChart = (id, label, field, isMetric = true) => {
+                if (charts[id]) charts[id].destroy();
+                charts[id] = new Chart(document.getElementById(id), {
+                    type: 'bar',
+                    data: { labels, datasets: [{ label, data: data.map(d => isMetric ? d.metrics[field] : d.time), backgroundColor: '#3498db' }] },
+                    options: { maintainAspectRatio: false }
+                });
+            };
+            createChart('chart-n', 'Nodes Used', 'n_used');
+            createChart('chart-d', 'Dispersion (D)', 'dispersion');
+            createChart('chart-p', 'Unplaced %', 'p_unplaced');
+            createChart('chart-t', 'Time (ms)', 'time', false);
+
+            // --- ОБНОВЛЕННЫЙ БЛОК: ИНТЕЛЛЕКТУАЛЬНЫЙ ВЕРДИКТ ---
+            const verdictBox = document.getElementById('verdict-text');
+            const successfulMethods = data.filter(d => d.metrics.p_unplaced === 0);
+
+            if (successfulMethods.length === 0) {
+                verdictBox.innerHTML = `<strong style="color: #e74c3c;"></strong> Ресурсов кластера недостаточно. Ни один метод не разместил 100% контейнеров.`;
+            } else {
+                // Сортируем: 
+                // 1. Сначала по минимальному количеству узлов (N_used)
+                // 2. Затем по минимальной дисперсии (D) - чтобы выбрать самый стабильный
+                // 3. Затем по минимальному времени (T_exec)
+                successfulMethods.sort((a, b) => {
+                    if (a.metrics.n_used !== b.metrics.n_used) return a.metrics.n_used - b.metrics.n_used;
+                    if (Math.abs(a.metrics.dispersion - b.metrics.dispersion) > 0.1) return a.metrics.dispersion - b.metrics.dispersion;
+                    return a.time - b.time;
+                });
+
+                const best = successfulMethods[0];
+
+                let reason = "";
+                if (best.name === "Genetic") reason = "наилучшее сочетание плотности упаковки и балансировки нагрузки";
+                else if (best.metrics.dispersion < 10) reason = "наиболее равномерное распределение нагрузки";
+                else reason = "минимальное использование вычислительных узлов";
+
+                verdictBox.innerHTML = `<strong>Оптимальный вариант:</strong> Метод <b>${best.name}</b>. Он выбран, так как обеспечил ${reason}.`;
+            }
+        }
+    </script>
 </body>
 
 </html>
