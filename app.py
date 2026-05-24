@@ -43,21 +43,21 @@ def genetic_algorithm(nodes_data, containers_data, pop_size=20, generations=50):
     best_unplaced = 0
 
     for _ in range(generations):
-        # 2. Оценка
+        # Оценка
         fits = []
         for ind in population:
             f, _, _ = get_fitness(ind)
             fits.append(f)
             
-        # 3. Отбор (выбираем лучших)
+        # Отбор 
         sorted_pop = [x for _, x in sorted(zip(fits, population))]
-        population = sorted_pop[:pop_size//2] # Оставляем топ-50%
+        population = sorted_pop[:pop_size//2] # Оставляем 50%
         
-        # 4. Скрещивание и мутация (восстанавливаем размер популяции)
+        # Скрещивание и мутация 
         while len(population) < pop_size:
             parent = random.choice(sorted_pop[:5])
             child = list(parent)
-            # Мутация: меняем узел у случайного контейнера
+            # Мутация
             child[random.randint(0, num_containers-1)] = random.randint(0, num_nodes-1)
             population.append(child)
             
@@ -74,8 +74,7 @@ def genetic_algorithm(nodes_data, containers_data, pop_size=20, generations=50):
 def run_placement_logic(method_id, nodes_data, containers_data):
     nodes = [dict(n, cpu_used=0, ram_used=0, items=[]) for n in nodes_data]
     unplaced = 0
-    
-    # Методы 1-3 работают "жадно" (по одному контейнеру)
+
     if method_id in [1, 2, 3]:
         for c in containers_data:
             target = -1
