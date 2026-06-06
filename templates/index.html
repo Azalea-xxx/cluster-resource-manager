@@ -179,32 +179,54 @@
             const data = await res.json();
             document.getElementById('compare-section').classList.remove('hidden');
 
-            // Сначала строим графики
             const labels = data.map(d => d.name);
+
             const createChart = (id, label, field, isMetric = true) => {
                 if (charts[id]) charts[id].destroy();
                 charts[id] = new Chart(document.getElementById(id), {
                     type: 'bar',
-                    data: { labels, datasets: [{ label, data: data.map(d => isMetric ? d.metrics[field] : d.time), backgroundColor: '#3498db' }] },
-                    options: { maintainAspectRatio: false }
+                    data: {
+                        labels,
+                        datasets: [{
+                            label,
+                            data: data.map(d => isMetric ? d.metrics[field] : d.time),
+                            backgroundColor: '#3498db'
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Алгоритм размещения',
+                                    font: { size: 12 }
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: label,
+                                    font: { size: 12 }
+                                },
+                                beginAtZero: true
+                            }
+                        }
+                    }
                 });
             };
-            createChart('chart-n', 'Nodes Used', 'n_used');
-            createChart('chart-d', 'Dispersion (D)', 'dispersion');
-            createChart('chart-p', 'Unplaced %', 'p_unplaced');
-            createChart('chart-t', 'Time (ms)', 'time', false);
 
-            // --- ОБНОВЛЕННЫЙ БЛОК: ИНТЕЛЛЕКТУАЛЬНЫЙ ВЕРДИКТ ---
+            createChart('chart-n', 'Количество используемых узлов (N_used)', 'n_used');
+            createChart('chart-d', 'Дисперсия нагрузки (D)', 'dispersion');
+            createChart('chart-p', 'Неразмещённые контейнеры, %', 'p_unplaced');
+            createChart('chart-t', 'Время выполнения, мс', 'time', false);
+
             const verdictBox = document.getElementById('verdict-text');
             const successfulMethods = data.filter(d => d.metrics.p_unplaced === 0);
 
             if (successfulMethods.length === 0) {
                 verdictBox.innerHTML = `<strong style="color: #e74c3c;"></strong> Ресурсов кластера недостаточно. Ни один метод не разместил 100% контейнеров.`;
             } else {
-                // Сортируем: 
-                // 1. Сначала по минимальному количеству узлов (N_used)
-                // 2. Затем по минимальной дисперсии (D) - чтобы выбрать самый стабильный
-                // 3. Затем по минимальному времени (T_exec)
                 successfulMethods.sort((a, b) => {
                     if (a.metrics.n_used !== b.metrics.n_used) return a.metrics.n_used - b.metrics.n_used;
                     if (Math.abs(a.metrics.dispersion - b.metrics.dispersion) > 0.1) return a.metrics.dispersion - b.metrics.dispersion;
@@ -218,7 +240,7 @@
                 else if (best.metrics.dispersion < 10) reason = "наиболее равномерное распределение нагрузки";
                 else reason = "минимальное использование вычислительных узлов";
 
-                verdictBox.innerHTML = `<strong>Оптимальный вариант:</strong> Метод <b>${best.name}</b>. Он выбран, так как обеспечил ${reason}.`;
+                verdictBox.innerHTML = `<strong>Лучший вариант:</strong> Метод <b>${best.name}</b>. Он выбран, так как обеспечил ${reason}.`;
             }
         }
     </script>
