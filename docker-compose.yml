@@ -1,4 +1,3 @@
-# docker-compose.yml
 version: '3.8'
 
 services:
@@ -11,7 +10,30 @@ services:
     environment:
       - LOG_FILE=/var/log/sim/sim.log
     networks:
-      - elk-net
+      - obs-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - '9090:9090'
+    networks:
+      - obs-net
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - '3000:3000'
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - obs-net
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
@@ -21,7 +43,7 @@ services:
     ports:
       - '9200:9200'
     networks:
-      - elk-net
+      - obs-net
 
   logstash:
     image: docker.elastic.co/logstash/logstash:8.15.0
@@ -32,7 +54,7 @@ services:
     depends_on:
       - elasticsearch
     networks:
-      - elk-net
+      - obs-net
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.15.0
@@ -43,7 +65,7 @@ services:
     depends_on:
       - elasticsearch
     networks:
-      - elk-net
+      - obs-net
 
   filebeat:
     image: docker.elastic.co/beats/filebeat:8.15.0
@@ -53,7 +75,44 @@ services:
     depends_on:
       - logstash
     networks:
-      - elk-net
+      - obs-net
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-7.2-latest
+    environment:
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=zabbix
+      - POSTGRES_DB=zabbix
+    ports:
+      - '10051:10051'
+    networks:
+      - obs-net
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.2-latest
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=zabbix
+      - POSTGRES_DB=zabbix
+    ports:
+      - '8080:8080'
+    networks:
+      - obs-net
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent2:alpine-7.2-latest
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_HOSTNAME=docker-host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - obs-net
 
 networks:
-  elk-net:
+  obs-net:
+
+volumes:
+  prometheus_data:
+  grafana_data:

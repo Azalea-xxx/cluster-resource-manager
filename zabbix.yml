@@ -1,0 +1,119 @@
+---
+- name: Установка и настройка Zabbix
+  hosts: zabbix_host
+  become: yes
+  vars:
+    zabbix_version: '7.2'
+    db_name: 'zabbix'
+    db_user: 'zabbix'
+    db_password: 'zabbix_pass'
+    zabbix_url: 'http://{{ ansible_default_ipv4.address }}:8080'
+  tasks:
+    - name: Установка PostgreSQL
+      apt:
+        name:
+          - postgresql
+          - postgresql-contrib
+        state: present
+
+    - name: Запуск PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Создание пользователя и базы данных
+      postgresql_db:
+        name: '{{ db_name }}'
+      postgresql_user:
+        name: '{{ db_user }}'
+        password: '{{ db_password }}'
+        db: '{{ db_name }}'
+
+    - name: Установка репозитория Zabbix
+      shell: |
+        wget -q https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.2-1+ubuntu22.04_all.deb
+        dpkg -i zabbix-release_latest_7.2-1+ubuntu22.04_all.deb
+        apt update
+      args:
+        warn: no
+
+    - name: Установка Zabbix Server + Agent + Frontend
+      apt:
+        name:
+          - zabbix-server-pgsql
+          - zabbix-agent2
+          - zabbix-frontend-php
+          - php-pgsql
+          - nginx
+        state: present
+
+    - name: Импорт схемы базы данных Zabbix
+      shell: zcat /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz | sudo -u zabbix psql {{ db_name }}
+      args:
+        warn: no
+      become_user: postgres
+
+    - name: Настройка Zabbix Server (конфиг)
+      template:
+        src: zabbix_server.conf.j2
+        dest: /etc/zabbix/zabbix_server.conf
+      notify: restart zabbix-server
+
+    - name: Настройка Zabbix Agent
+      template:
+        src: zabbix_agent2.conf.j2
+        dest: /etc/zabbix/zabbix_agent2.conf
+      notify: restart zabbix-agent
+
+    - name: Настройка Nginx для Zabbix
+      template:
+        src: zabbix_nginx.conf.j2
+        dest: /etc/nginx/sites-available/zabbix
+      notify: restart nginx
+
+    - name: Активация сайта Nginx
+      file:
+        src: /etc/nginx/sites-available/zabbix
+        dest: /etc/nginx/sites-enabled/zabbix
+        state: link
+
+    - name: Добавление хоста в Zabbix через API
+      uri:
+        url: 'http://localhost:8080/api_jsonrpc.php'
+        method: POST
+        headers:
+          Content-Type: 'application/json-rpc'
+        body_format: json
+        body:
+          jsonrpc: '2.0'
+          method: 'host.create'
+          params:
+            host: '{{ ansible_hostname }}'
+            interfaces:
+              - type: 1
+                main: 1
+                useip: 1
+                ip: '{{ ansible_default_ipv4.address }}'
+                dns: ''
+                port: '10050'
+            groups:
+              - groupid: '2'
+          id: 1
+          auth: '{{ zabbix_auth_token }}'
+
+  handlers:
+    - name: restart zabbix-server
+      systemd:
+        name: zabbix-server
+        state: restarted
+
+    - name: restart zabbix-agent
+      systemd:
+        name: zabbix-agent2
+        state: restarted
+
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted

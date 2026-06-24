@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify
+from prometheus_flask_exporter import PrometheusMetrics
 import random
 import numpy as np
 import time
@@ -20,6 +21,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
+
+from prometheus_client import Counter, Histogram, Gauge
+
+algorithm_requests = Counter('sim_algorithm_requests_total', 'Total requests by algorithm', ['algorithm'])
+
+algorithm_duration = Histogram('sim_algorithm_duration_seconds', 'Duration of algorithm execution', ['algorithm'])
+
+unplaced_gauge = Gauge('sim_unplaced_containers', 'Unplaced containers percentage')
+
+nodes_used_gauge = Gauge('sim_nodes_used', 'Number of used nodes')
+
+active_requests = Gauge('sim_active_requests', 'Active requests')
+ 
+metrics.info('app_info', 'SRE Simulator Info', version='1.0.0')
 
 storage = {"nodes": [], "containers": []}
 
@@ -160,11 +177,25 @@ def update_data():
 @app.route('/solve', methods=['POST'])
 def solve():
     m_id = int(request.json.get('method', 1))
-    logger.info(f"Запуск алгоритма {m_id}")
+    algorithm_name = ['First Fit', 'Best Fit', 'Worst Fit', 'Genetic'][m_id - 1]
+
+    logger.info(f"Запуск алгоритма {algorithm_name} (ID={m_id})")
+
+    algorithm_requests.labels(algorithm=algorithm_name).inc()
+
     start = time.perf_counter()
     res = run_placement_logic(m_id, storage['nodes'], storage['containers'])
-    res['metrics']['exec_time'] = round((time.perf_counter() - start) * 1000, 3)
-    logger.info(f"Алгоритм {m_id} завершён за {res['metrics']['exec_time']} мс")
+    duration = time.perf_counter() - start
+
+    algorithm_duration.labels(algorithm=algorithm_name).observe(duration)
+
+    unplaced_gauge.set(res['metrics']['p_unplaced'])
+    nodes_used_gauge.set(res['metrics']['n_used'])
+
+    res['metrics']['exec_time'] = round(duration * 1000, 3)
+
+    logger.info(f"Алгоритм {algorithm_name} завершён за {res['metrics']['exec_time']} мс")
+
     return jsonify(res)
 
 @app.route('/compare_all', methods=['POST'])
@@ -179,6 +210,7 @@ def compare_all():
             "time": round((time.perf_counter() - start) * 1000, 3)
         })
     return jsonify(summary)
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

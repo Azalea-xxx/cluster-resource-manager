@@ -1,0 +1,14 @@
+---
+- name: Полное развертывание
+  hosts: all
+  become: yes
+  tasks:
+    - name: Установка Docker и Docker Compose
+      include_tasks: docker_setup.yml
+
+    - name: Запуск контейнеров через Docker Compose
+      include_tasks: docker_compose_up.yml
+
+    - name: Настройка Zabbix
+      include_tasks: deploy_zabbix.yml
+      when: deploy_zabbix | default(false)

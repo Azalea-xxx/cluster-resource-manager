@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'simulator'
+    static_configs:
+      - targets: ['sim:5000']
+        labels:
+          application: 'cluster-sim'
+          environment: 'dev'
