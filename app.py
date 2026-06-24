@@ -3,6 +3,21 @@ import random
 import numpy as np
 import time
 import copy
+import logging
+import os
+
+LOG_DIR = "/var/log/sim"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(f"{LOG_DIR}/sim.log"),
+        logging.StreamHandler()  # для вывода в консоль
+    ]
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -145,9 +160,11 @@ def update_data():
 @app.route('/solve', methods=['POST'])
 def solve():
     m_id = int(request.json.get('method', 1))
+    logger.info(f"Запуск алгоритма {m_id}")
     start = time.perf_counter()
     res = run_placement_logic(m_id, storage['nodes'], storage['containers'])
     res['metrics']['exec_time'] = round((time.perf_counter() - start) * 1000, 3)
+    logger.info(f"Алгоритм {m_id} завершён за {res['metrics']['exec_time']} мс")
     return jsonify(res)
 
 @app.route('/compare_all', methods=['POST'])

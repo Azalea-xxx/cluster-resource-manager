@@ -1,0 +1,13 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/sim/sim.log
+    fields:
+      app: cluster-sim
+    fields_under_root: true
+    json.keys_under_root: true
+    json.overwrite_keys: true
+
+output.logstash:
+  hosts: ['logstash:5044']
