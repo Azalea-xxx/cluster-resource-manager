@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+    - type: log
+      enabled: true
+      paths:
+        - /var/log/sim/sim.log
+      json.keys_under_root: true
+      json.overwrite_keys: true
+    output.logstash:
+      hosts: ["logstash-service:5044"]

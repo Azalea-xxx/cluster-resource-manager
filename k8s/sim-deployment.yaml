@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sim
+  labels:
+    app: sim
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sim
+  template:
+    metadata:
+      labels:
+        app: sim
+    spec:
+      containers:
+        - name: sim
+          image: ghcr.io/ТВОЙ_ЛОГИН/cluster-sim:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: LOG_FILE
+              value: /var/log/sim/sim.log
+          volumeMounts:
+            - name: sim-logs
+              mountPath: /var/log/sim
+      volumes:
+        - name: sim-logs
+          emptyDir: {}
